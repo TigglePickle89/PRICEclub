@@ -415,10 +415,14 @@ function showDemo(q, meta, isErr) {
 }
 
 async function scrapeSearch(query) {
-  var both = await Promise.allSettled([
-    fetchStore(query, 'amazon.ie'),
-    fetchStore(query, 'amazon.de')
-  ]);
+  var res = await fetch('/.netlify/functions/search?query=' + encodeURIComponent(query));
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  var data = await res.json();
+  if(data.error) throw new Error(data.error);
+  var products = (data.products || []).filter(function(p){ return p && p.title && p.prices; });
+  products.sort(function(a,b){ return saving(b)-saving(a); });
+  return products;
+}
 
   var ie = both[0].status === 'fulfilled' ? both[0].value : {};
   var de = both[1].status === 'fulfilled' ? both[1].value : {};
