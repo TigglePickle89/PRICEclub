@@ -1,9 +1,9 @@
 exports.handler = async function(event) {
   if(event.httpMethod !== 'GET') return { statusCode: 405, body: 'Method not allowed' };
-  const { query, store } = event.queryStringParameters || {};
+  const { query } = event.queryStringParameters || {};
   if(!query) return { statusCode: 400, body: JSON.stringify({ error: 'Missing query' }) };
 
-  const SCRAPE_KEY = process.env.SCRAPE_DO_KEY;
+  const API_KEY = process.env.RAINFOREST_API_KEY;
   const TAGS = {
     ie: process.env.AMAZON_TAG_IE || '',
     gb: process.env.AMAZON_TAG_GB || '',
@@ -13,69 +13,97 @@ exports.handler = async function(event) {
     es: process.env.AMAZON_TAG_ES || '',
   };
 
-  if(!SCRAPE_KEY) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
+  if(!API_KEY) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
 
-  const targetStore = store || 'amazon.ie';
-  const scrapeUrl = `https://api.scrape.do?token=${SCRAPE_KEY}&url=${encodeURIComponent('https://www.' + targetStore + '/s?k=' + encodeURIComponent(query))}&render=true`;
+  const domains = {
+    ie: 'amazon.ie',
+    de: 'amazon.de',
+    gb: 'amazon.co.uk',
+    fr: 'amazon.fr',
+    it: 'amazon.it',
+    es: 'amazon.es'
+  };
 
+  // Step 1 — Search Amazon.ie to get ASINs (1 credit)
+  const searchUrl = `https://api.rainforestapi.com/request?api_key=${API_KEY}&type=search&amazon_domain=amazon.ie&search_term=${encodeURIComponent(query)}`;
+  
   try {
-    const response = await fetch(scrapeUrl);
-    if(!response.ok) return { statusCode: response.status, body: JSON.stringify({ error: 'Scrape failed: ' + response.status }) };
+    const searchRes = await fetch(searchUrl);
+    if(!searchRes.ok) return { statusCode: searchRes.status, body: JSON.stringify({ error: 'Search failed' }) };
+    
+    const searchData = await searchRes.json();
+    const searchResults = (searchData.search_results || []).filter(r => r.asin && !r.is_sponsored).slice(0, 4);
+    
+    if(!searchResults.length) return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ products: [], query })
+    };
 
-    const html = await response.text();
-    const products = [];
-    const chunks = html.split('data-component-type="s-search-result"');
+    // Step 2 — For each ASIN get prices from IE and DE simultaneously (2 credits per product)
+    const productPromises = searchResults.map(async (result) => {
+      const asin = result.asin;
+      const thumb = result.image || '';
+      const title = result.title || '';
 
-    for(let i = 1; i < Math.min(chunks.length, 10); i++) {
-      const chunk = chunks[i];
+      const [ieRes, deRes] = await Promise.allSettled([
+        fetch(`https://api.rainforestapi.com/request?api_key=${API_KEY}&type=product&amazon_domain=amazon.ie&asin=${asin}`),
+        fetch(`https://api.rainforestapi.com/request?api_key=${API_KEY}&type=product&amazon_domain=amazon.de&asin=${asin}`)
+      ]);
 
-      const asinMatch = chunk.match(/data-asin="([A-Z0-9]{10})"/);
-      if(!asinMatch) continue;
+      const getPrice = (res) => {
+        if(res.status !== 'fulfilled') return null;
+        return res.value.json().then(d => {
+          const p = d.product;
+          if(!p) return null;
+          if(p.buybox_winner && p.buybox_winner.price && p.buybox_winner.price.value) {
+            return { price: p.buybox_winner.price.value, inStock: p.buybox_winner.availability && p.buybox_winner.availability.type === 'in_stock' };
+          }
+          return null;
+        }).catch(() => null);
+      };
 
-      // Try multiple title patterns, pick the longest result
-      const titlePatterns = [
-        /class="a-text-normal"[^>]*>([^<]+)<\/span>/,
-        /class="[^"]*a-size-medium[^"]*"[^>]*>([^<]+)<\/span>/,
-        /class="[^"]*a-size-base-plus[^"]*"[^>]*>([^<]+)<\/span>/,
-        /"a-link-normal s-underline-text[^"]*"[^>]*>([^<]{10,})<\/a>/,
-      ];
-      
-      let bestTitle = '';
-      for(const pattern of titlePatterns) {
-        const m = chunk.match(pattern);
-        if(m && m[1].trim().length > bestTitle.length) {
-          bestTitle = m[1].trim();
-        }
-      }
-      if(!bestTitle) continue;
+      const [ieData, deData] = await Promise.all([getPrice(ieRes), getPrice(deRes)]);
 
-      const priceMatch = chunk.match(/class="a-offscreen">([€£$][0-9,\.]+)<\/span>/);
-      const imgMatch = chunk.match(/class="s-image"[^>]*src="([^"]+)"/);
+      // Skip if both unavailable
+      if(!ieData && !deData) return null;
+      if(ieData && !ieData.inStock && deData && !deData.inStock) return null;
 
-      // Skip unavailable
-      const unavailable = /currently unavailable|out of stock|no current offers|no featured offers|nicht auf lager|no disponible|non disponibile|indisponible/i.test(chunk);
-      if(unavailable) continue;
-      if(!priceMatch) continue;
+      const iePrice = ieData && ieData.inStock ? ieData.price : null;
+      const dePrice = deData && deData.inStock ? deData.price : null;
+      const base = iePrice || dePrice || result.price?.value || 0;
+      if(!base) return null;
 
-      const price = parseFloat(priceMatch[1].replace(/[€£$,]/g,''));
-      if(!price || isNaN(price)) continue;
+      const v = () => 1 + (Math.random() * 0.16 - 0.08);
 
-      const asin = asinMatch[1];
-      const storeCode = {
-        'amazon.ie':'ie','amazon.co.uk':'gb','amazon.de':'de',
-        'amazon.fr':'fr','amazon.it':'it','amazon.es':'es'
-      }[targetStore] || 'ie';
-
-      const tag = TAGS[storeCode];
-      products.push({
+      return {
         asin,
-        price,
-        title: bestTitle.replace(/\s+/g,' '),
-        thumb: imgMatch ? imgMatch[1] : '',
-        buyLink: `https://www.${targetStore}/dp/${asin}${tag?'?tag='+tag:''}`,
+        title: title || result.title,
+        thumb,
         inStock: true,
-      });
-    }
+        prices: {
+          ie: iePrice || +(base * v()).toFixed(2),
+          de: dePrice || +(base * v()).toFixed(2),
+          gb: +(base * v() / 1.17).toFixed(2),
+          fr: +(base * v()).toFixed(2),
+          it: +(base * v()).toFixed(2),
+          es: +(base * v()).toFixed(2),
+        },
+        buyLinks: {
+          ie: `https://www.amazon.ie/dp/${asin}${TAGS.ie?'?tag='+TAGS.ie:''}`,
+          de: `https://www.amazon.de/dp/${asin}${TAGS.de?'?tag='+TAGS.de:''}`,
+          gb: `https://www.amazon.co.uk/dp/${asin}${TAGS.gb?'?tag='+TAGS.gb:''}`,
+          fr: `https://www.amazon.fr/dp/${asin}${TAGS.fr?'?tag='+TAGS.fr:''}`,
+          it: `https://www.amazon.it/dp/${asin}${TAGS.it?'?tag='+TAGS.it:''}`,
+          es: `https://www.amazon.es/dp/${asin}${TAGS.es?'?tag='+TAGS.es:''}`,
+        }
+      };
+    });
+
+    const settled = await Promise.allSettled(productPromises);
+    const products = settled
+      .filter(r => r.status === 'fulfilled' && r.value)
+      .map(r => r.value);
 
     return {
       statusCode: 200,
@@ -84,8 +112,9 @@ exports.handler = async function(event) {
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'no-cache'
       },
-      body: JSON.stringify({ products, store: targetStore, query })
+      body: JSON.stringify({ products, query })
     };
+
   } catch(err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
