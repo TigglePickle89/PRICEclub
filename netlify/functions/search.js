@@ -15,118 +15,67 @@ exports.handler = async function(event) {
 
   if(!SCRAPE_KEY) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
 
-  const scrape = async (url) => {
-    const res = await fetch(`https://api.scrape.do?token=${SCRAPE_KEY}&url=${encodeURIComponent(url)}&render=true`);
-    if(!res.ok) throw new Error('Scrape failed: ' + res.status);
-    return res.text();
-  };
+  const targetStore = store || 'amazon.ie';
+  const scrapeUrl = `https://api.scrape.do?token=${SCRAPE_KEY}&url=${encodeURIComponent('https://www.' + targetStore + '/s?k=' + encodeURIComponent(query))}&render=true`;
 
-  // STEP 1 — Search Amazon.ie to get ASINs (1 credit)
   try {
-    const searchHtml = await scrape(`https://www.amazon.ie/s?k=${encodeURIComponent(query)}`);
-    const chunks = searchHtml.split('data-component-type="s-search-result"');
-    
-    // Extract ASINs and thumbnails from search results
-    const asins = [];
-    for(let i = 1; i < Math.min(chunks.length, 7); i++) {
+    const response = await fetch(scrapeUrl);
+    if(!response.ok) return { statusCode: response.status, body: JSON.stringify({ error: 'Scrape failed: ' + response.status }) };
+
+    const html = await response.text();
+    const products = [];
+    const chunks = html.split('data-component-type="s-search-result"');
+
+    for(let i = 1; i < Math.min(chunks.length, 10); i++) {
       const chunk = chunks[i];
+
       const asinMatch = chunk.match(/data-asin="([A-Z0-9]{10})"/);
-      const imgMatch = chunk.match(/class="s-image"[^>]*src="([^"]+)"/);
-      if(asinMatch && asinMatch[1]) {
-        asins.push({
-          asin: asinMatch[1],
-          thumb: imgMatch ? imgMatch[1] : ''
-        });
-      }
-    }
+      if(!asinMatch) continue;
 
-    if(!asins.length) return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ products: [], store: 'amazon.ie', query })
-    };
-
-    // STEP 2 — For each ASIN scrape both IE and DE product pages simultaneously
-    const parseProductPage = (html, storeCode, domain) => {
-      // Get full title
-      const titleMatch = html.match(/id="productTitle"[^>]*>\s*([^<]+)\s*</) ||
-                         html.match(/class="[^"]*product-title[^"]*"[^>]*>\s*([^<]+)\s*</);
+      // Try multiple title patterns, pick the longest result
+      const titlePatterns = [
+        /class="a-text-normal"[^>]*>([^<]+)<\/span>/,
+        /class="[^"]*a-size-medium[^"]*"[^>]*>([^<]+)<\/span>/,
+        /class="[^"]*a-size-base-plus[^"]*"[^>]*>([^<]+)<\/span>/,
+        /"a-link-normal s-underline-text[^"]*"[^>]*>([^<]{10,})<\/a>/,
+      ];
       
-      // Get price - try multiple selectors
-      const priceMatch = html.match(/id="priceblock_ourprice"[^>]*>([^<]+)</) ||
-                         html.match(/class="a-price-whole">([^<]+)</) ||
-                         html.match(/id="price_inside_buybox"[^>]*>([^<]+)</) ||
-                         html.match(/class="[^"]*priceToPay[^"]*"[\s\S]*?class="a-offscreen">([^<]+)</) ||
-                         html.match(/class="a-offscreen">([€£$][0-9,\.]+)</);
+      let bestTitle = '';
+      for(const pattern of titlePatterns) {
+        const m = chunk.match(pattern);
+        if(m && m[1].trim().length > bestTitle.length) {
+          bestTitle = m[1].trim();
+        }
+      }
+      if(!bestTitle) continue;
 
-      // Check availability
-      const unavailable = /currently unavailable|out of stock|no current offers|not available|no featured offers|nicht verfügbar|agotado|esaurito|indisponible/i.test(html);
+      const priceMatch = chunk.match(/class="a-offscreen">([€£$][0-9,\.]+)<\/span>/);
+      const imgMatch = chunk.match(/class="s-image"[^>]*src="([^"]+)"/);
 
-      if(!titleMatch || !priceMatch || unavailable) return null;
+      // Skip unavailable
+      const unavailable = /currently unavailable|out of stock|no current offers|no featured offers|nicht auf lager|no disponible|non disponibile|indisponible/i.test(chunk);
+      if(unavailable) continue;
+      if(!priceMatch) continue;
 
-      const priceStr = priceMatch[1].replace(/[€£$,\s]/g,'').trim();
-      const price = parseFloat(priceStr);
-      if(!price || isNaN(price)) return null;
+      const price = parseFloat(priceMatch[1].replace(/[€£$,]/g,''));
+      if(!price || isNaN(price)) continue;
+
+      const asin = asinMatch[1];
+      const storeCode = {
+        'amazon.ie':'ie','amazon.co.uk':'gb','amazon.de':'de',
+        'amazon.fr':'fr','amazon.it':'it','amazon.es':'es'
+      }[targetStore] || 'ie';
 
       const tag = TAGS[storeCode];
-      return {
-        title: titleMatch[1].trim().replace(/\s+/g,' '),
-        price,
-        inStock: true,
-        storeCode,
-        domain,
-      };
-    };
-
-    // Process top 4 ASINs - scrape IE and DE product pages in parallel
-    const topAsins = asins.slice(0, 4);
-    
-    const productPromises = topAsins.map(async ({ asin, thumb }) => {
-      const [ieHtml, deHtml] = await Promise.allSettled([
-        scrape(`https://www.amazon.ie/dp/${asin}`),
-        scrape(`https://www.amazon.de/dp/${asin}`)
-      ]);
-
-      const ieData = ieHtml.status === 'fulfilled' ? parseProductPage(ieHtml.value, 'ie', 'amazon.ie') : null;
-      const deData = deHtml.status === 'fulfilled' ? parseProductPage(deHtml.value, 'de', 'amazon.de') : null;
-
-      if(!ieData && !deData) return null;
-
-      const base = (ieData || deData).price;
-      const v = () => 1 + (Math.random() * 0.16 - 0.08);
-
-      const title = (ieData || deData).title;
-      const tag_ie = TAGS['ie'];
-      const tag_de = TAGS['de'];
-
-      return {
+      products.push({
         asin,
-        thumb,
-        title,
+        price,
+        title: bestTitle.replace(/\s+/g,' '),
+        thumb: imgMatch ? imgMatch[1] : '',
+        buyLink: `https://www.${targetStore}/dp/${asin}${tag?'?tag='+tag:''}`,
         inStock: true,
-        prices: {
-          ie: ieData ? ieData.price : +(base * v()).toFixed(2),
-          de: deData ? deData.price : +(base * v()).toFixed(2),
-          gb: +(base * v() / 1.17).toFixed(2),
-          fr: +(base * v()).toFixed(2),
-          it: +(base * v()).toFixed(2),
-          es: +(base * v()).toFixed(2),
-        },
-        buyLinks: {
-          ie: `https://www.amazon.ie/dp/${asin}${tag_ie?'?tag='+tag_ie:''}`,
-          de: `https://www.amazon.de/dp/${asin}${tag_de?'?tag='+tag_de:''}`,
-          gb: `https://www.amazon.co.uk/dp/${asin}${TAGS.gb?'?tag='+TAGS.gb:''}`,
-          fr: `https://www.amazon.fr/dp/${asin}${TAGS.fr?'?tag='+TAGS.fr:''}`,
-          it: `https://www.amazon.it/dp/${asin}${TAGS.it?'?tag='+TAGS.it:''}`,
-          es: `https://www.amazon.es/dp/${asin}${TAGS.es?'?tag='+TAGS.es:''}`,
-        }
-      };
-    });
-
-    const productResults = await Promise.allSettled(productPromises);
-    const products = productResults
-      .filter(r => r.status === 'fulfilled' && r.value)
-      .map(r => r.value);
+      });
+    }
 
     return {
       statusCode: 200,
@@ -135,9 +84,8 @@ exports.handler = async function(event) {
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'no-cache'
       },
-      body: JSON.stringify({ products, store: 'amazon.ie', query })
+      body: JSON.stringify({ products, store: targetStore, query })
     };
-
   } catch(err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
