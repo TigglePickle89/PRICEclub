@@ -33,14 +33,9 @@ exports.handler = async function(event) {
       if(!asinMatch) continue;
 
       // Full title - grab the longest matching span to get complete product name
-      const titleCandidates = [
-        ...chunk.matchAll(/class="[^"]*a-size-medium[^"]*"[^>]*>\s*([^<]+)\s*<\/span>/g),
-        ...chunk.matchAll(/class="[^"]*a-size-base-plus[^"]*"[^>]*>\s*([^<]+)\s*<\/span>/g),
-        ...chunk.matchAll(/"a-text-normal"[^>]*>\s*([^<]+)\s*<\/span>/g),
-      ];
-      // Pick the longest title candidate
-      const titleMatch = titleCandidates.reduce((best, m) => 
-        (!best || m[1].trim().length > best[1].trim().length) ? m : best, null);
+      const titleMatch = chunk.match(/class="a-text-normal"[^>]*>([^<]+)<\/span>/) ||
+  chunk.match(/class="[^"]*a-size-medium[^"]*"[^>]*>([^<]+)<\/span>/) ||
+  chunk.match(/class="[^"]*a-size-base-plus[^"]*"[^>]*>([^<]+)<\/span>/);
 
       const priceMatch = chunk.match(/class="a-offscreen">([€£$][0-9,\.]+)<\/span>/);
       const imgMatch = chunk.match(/class="s-image"[^>]*src="([^"]+)"/);
