@@ -15,94 +15,101 @@ exports.handler = async function(event) {
 
   if(!API_KEY) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
 
-  const domains = {
-    ie: 'amazon.ie',
-    de: 'amazon.de',
-    gb: 'amazon.co.uk',
-    fr: 'amazon.fr',
-    it: 'amazon.it',
-    es: 'amazon.es'
+  const STORES = [
+    { code: 'ie', domain: 'amazon.ie' },
+    { code: 'gb', domain: 'amazon.co.uk' },
+    { code: 'de', domain: 'amazon.de' },
+    { code: 'fr', domain: 'amazon.fr' },
+    { code: 'it', domain: 'amazon.it' },
+    { code: 'es', domain: 'amazon.es' },
+  ];
+
+  const rf = async (params) => {
+    const url = 'https://api.rainforestapi.com/request?' + 
+      Object.entries({ api_key: API_KEY, ...params })
+        .map(([k,v]) => k + '=' + encodeURIComponent(v)).join('&');
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Rainforest error ' + res.status);
+    return res.json();
   };
 
-  // Step 1 — Search Amazon.ie to get ASINs (1 credit)
-  const searchUrl = `https://api.rainforestapi.com/request?api_key=${API_KEY}&type=search&amazon_domain=amazon.ie&search_term=${encodeURIComponent(query)}`;
-  
   try {
-    const searchRes = await fetch(searchUrl);
-    if(!searchRes.ok) return { statusCode: searchRes.status, body: JSON.stringify({ error: 'Search failed' }) };
-    
-    const searchData = await searchRes.json();
-    const searchResults = (searchData.search_results || []).filter(r => r.asin && !r.is_sponsored).slice(0, 4);
-    
+    // Step 1 — Search Amazon.ie to get top ASINs (1 credit)
+    const searchData = await rf({
+      type: 'search',
+      amazon_domain: 'amazon.ie',
+      search_term: query
+    });
+
+    const searchResults = (searchData.search_results || [])
+      .filter(r => r.asin && !r.is_sponsored)
+      .slice(0, 3); // Top 3 to save credits
+
     if(!searchResults.length) return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({ products: [], query })
     };
 
-    // Step 2 — For each ASIN get prices from IE and DE simultaneously (2 credits per product)
+    // Step 2 — For each ASIN query all 6 stores simultaneously
     const productPromises = searchResults.map(async (result) => {
       const asin = result.asin;
       const thumb = result.image || '';
       const title = result.title || '';
 
-      const [ieRes, deRes] = await Promise.allSettled([
-        fetch(`https://api.rainforestapi.com/request?api_key=${API_KEY}&type=product&amazon_domain=amazon.ie&asin=${asin}`),
-        fetch(`https://api.rainforestapi.com/request?api_key=${API_KEY}&type=product&amazon_domain=amazon.de&asin=${asin}`)
-      ]);
+      // Query all 6 stores in parallel (6 credits per product)
+      const storeResults = await Promise.allSettled(
+        STORES.map(store => rf({
+          type: 'product',
+          amazon_domain: store.domain,
+          asin: asin
+        }))
+      );
 
-      const getPrice = (res) => {
-        if(res.status !== 'fulfilled') return null;
-        return res.value.json().then(d => {
-          const p = d.product;
-          if(!p) return null;
-          if(p.buybox_winner && p.buybox_winner.price && p.buybox_winner.price.value) {
-            return { price: p.buybox_winner.price.value, inStock: p.buybox_winner.availability && p.buybox_winner.availability.type === 'in_stock' };
-          }
-          return null;
-        }).catch(() => null);
-      };
+      const prices = {};
+      const buyLinks = {};
+      let hasAnyPrice = false;
 
-      const [ieData, deData] = await Promise.all([getPrice(ieRes), getPrice(deRes)]);
+      storeResults.forEach((res, idx) => {
+        const store = STORES[idx];
+        const tag = TAGS[store.code];
+        buyLinks[store.code] = `https://www.${store.domain}/dp/${asin}${tag ? '?tag=' + tag : ''}`;
 
-      // Skip if both unavailable
-      if(!ieData && !deData) return null;
-      if(ieData && !ieData.inStock && deData && !deData.inStock) return null;
+        if(res.status !== 'fulfilled') return;
+        const product = res.value.product;
+        if(!product) return;
 
-      const iePrice = ieData && ieData.inStock ? ieData.price : null;
-      const dePrice = deData && deData.inStock ? deData.price : null;
-      const base = iePrice || dePrice || result.price?.value || 0;
-      if(!base) return null;
+        // Check availability
+        const buybox = product.buybox_winner;
+        if(!buybox) return;
+        if(buybox.availability && buybox.availability.type !== 'in_stock') return;
+        if(!buybox.price || !buybox.price.value) return;
 
-      const v = () => 1 + (Math.random() * 0.16 - 0.08);
+        // Convert to EUR if GBP
+        let price = buybox.price.value;
+        if(store.code === 'gb' && buybox.price.currency === 'GBP') {
+          price = +(price * 1.17).toFixed(2); // Convert GBP to EUR approx
+        }
+
+        prices[store.code] = price;
+        hasAnyPrice = true;
+      });
+
+      if(!hasAnyPrice) return null;
 
       return {
         asin,
-        title: title || result.title,
+        title,
         thumb,
         inStock: true,
-        prices: {
-          ie: iePrice || +(base * v()).toFixed(2),
-          de: dePrice || +(base * v()).toFixed(2),
-          gb: +(base * v() / 1.17).toFixed(2),
-          fr: +(base * v()).toFixed(2),
-          it: +(base * v()).toFixed(2),
-          es: +(base * v()).toFixed(2),
-        },
-        buyLinks: {
-          ie: `https://www.amazon.ie/dp/${asin}${TAGS.ie?'?tag='+TAGS.ie:''}`,
-          de: `https://www.amazon.de/dp/${asin}${TAGS.de?'?tag='+TAGS.de:''}`,
-          gb: `https://www.amazon.co.uk/dp/${asin}${TAGS.gb?'?tag='+TAGS.gb:''}`,
-          fr: `https://www.amazon.fr/dp/${asin}${TAGS.fr?'?tag='+TAGS.fr:''}`,
-          it: `https://www.amazon.it/dp/${asin}${TAGS.it?'?tag='+TAGS.it:''}`,
-          es: `https://www.amazon.es/dp/${asin}${TAGS.es?'?tag='+TAGS.es:''}`,
-        }
+        prices,
+        buyLinks
       };
     });
 
     const settled = await Promise.allSettled(productPromises);
     const products = settled
-      .filter(r => r.status === 'fulfilled' && r.value)
+      .filter(r => r.status === 'fulfilled' && r.value && Object.keys(r.value.prices).length > 0)
       .map(r => r.value);
 
     return {
