@@ -41,8 +41,8 @@ exports.handler = async function(event) {
       const imgMatch = chunk.match(/class="s-image"[^>]*src="([^"]+)"/);
       
       // Check availability - skip if explicitly unavailable
-      const unavailable = /currently unavailable|out of stock|nicht auf lager|no disponible|non disponibile|indisponible/i.test(chunk);
-      if(unavailable) continue;
+      const unavailable = /currently unavailable|out of stock|nicht auf lager|no disponible|non disponibile|indisponible|unavailable|no longer available|not available/i.test(chunk);
+if(unavailable) continue;
 
       if(!titleMatch || !priceMatch) continue;
 
