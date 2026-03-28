@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PricePilot.ie — Find Europe's Best Price</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#faf8f2;color:#1a1a14}
+header{background:#0a3d1f;padding:0 16px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(201,168,76,0.2)}
+.logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+.logo-box{width:28px;height:28px;background:#c9a84c;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;color:#0a3d1f;flex-shrink:0}
+.logo-text{font-size:1.25rem;font-weight:700;color:#e8c96a}
+.logo-ie{font-size:0.58rem;background:rgba(201,168,76,0.2);color:#c9a84c;padding:2px 6px;border-radius:4px;border:1px solid rgba(201,168,76,0.3);font-weight:600;letter-spacing:0.05em}
+.burger{width:36px;height:36px;background:rgba(255,255,255,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;flex-shrink:0}
+.burger span{display:block;width:16px;height:2px;background:#c9a84c;border-radius:2px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:none}
+.overlay.open{display:block}
+.drawer{position:fixed;top:0;right:-300px;bottom:0;width:260px;background:#0a3d1f;z-index:101;transition:right 0.3s ease;display:flex;flex-direction:column;border-left:1px solid rgba(201,168,76,0.2)}
+.drawer.open{right:0}
+.drawer-head{padding:16px;border-bottom:1px solid rgba(201,168,76,0.15);display:flex;justify-content:space-between;align-items:center}
+.drawer-logo{font-size:1.1rem;font-weight:700;color:#e8c96a}
+.drawer-close{background:rgba(255,255,255,0.08);border:none;color:#c9a84c;width:30px;height:30px;border-radius:6px;font-size:1.1rem;cursor:pointer}
+.drawer-item{display:flex;align-items:center;gap:10px;padding:13px 16px;color:rgba(255,255,255,0.8);font-size:0.9rem;cursor:pointer;border:none;background:none;width:100%;text-align:left}
+.drawer-item:hover{background:rgba(201,168,76,0.1);color:#e8c96a}
+.drawer-div{height:1px;background:rgba(201,168,76,0.1);margin:4px 16px}
+.drawer-foot{padding:16px;border-top:1px solid rgba(201,168,76,0.1);margin-top:auto;font-size:0.72rem;color:rgba(255,255,255,0.3)}
+.page{display:none}
+.page.active{display:block}
+.hero{background:linear-gradient(160deg,#0a3d1f,#16a05a);padding:36px 16px 44px}
+.hero h1{font-size:1.9rem;font-weight:700;color:#fff;line-height:1.2;margin-bottom:10px}
+.hero h1 em{font-style:normal;color:#e8c96a}
+.hero p{color:rgba(255,255,255,0.7);font-size:0.9rem;margin-bottom:22px;line-height:1.6}
+.search-row{display:flex;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.2)}
+.search-row input{flex:1;border:none;outline:none;padding:13px 14px;font-size:0.92rem;color:#1a1a14;min-width:0;font-family:system-ui,sans-serif}
+.search-row button{background:#c9a84c;color:#0a3d1f;border:none;padding:13px 16px;font-weight:700;font-size:0.88rem;cursor:pointer;white-space:nowrap;font-family:system-ui,sans-serif}
+.flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.flag{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);padding:4px 9px;border-radius:20px;font-size:0.73rem;display:flex;align-items:center;gap:4px}
+.flag img{width:14px;height:10px;border-radius:2px;object-fit:cover}
+.section{padding:20px 16px}
+.section-title{font-size:1.15rem;font-weight:700;color:#0a3d1f;margin-bottom:3px}
+.section-sub{font-size:0.78rem;color:#8a8a70;margin-bottom:14px}
+.card{background:#fff;border:1px solid #e8e0cc;border-radius:12px;display:flex;margin-bottom:10px;overflow:hidden;cursor:pointer;transition:box-shadow 0.15s}
+.card:active{opacity:0.85}
+.card-img{width:78px;min-width:78px;background:#f2ede0;display:flex;align-items:center;justify-content:center;border-right:1px solid #e8e0cc;padding:8px}
+.card-img img{width:58px;height:58px;object-fit:contain;border-radius:4px}
+.card-body{flex:1;padding:10px 12px;min-width:0}
+.card-title{font-size:0.83rem;font-weight:500;color:#1a1a14;line-height:1.35;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.prices{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px}
+.chip{font-size:0.7rem;font-weight:600;padding:3px 7px;border-radius:5px;display:flex;align-items:center;gap:3px}
+.chip img{width:12px;height:9px;border-radius:2px;object-fit:cover}
+.chip-low{background:#e6f5ec;color:#0f5c30}
+.chip-high{background:#fdf0ef;color:#c0392b}
+.save{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#0a3d1f,#16a05a);color:#e8c96a;font-size:0.7rem;font-weight:600;padding:3px 8px 3px 5px;border-radius:20px;margin-bottom:3px}
+.save img{width:12px;height:9px;border-radius:2px;object-fit:cover}
+.ships{display:inline-flex;align-items:center;gap:3px;font-size:0.65rem;font-weight:600;padding:2px 6px;border-radius:4px}
+.ships-yes{background:#e0f0e8;color:#0f5c30}
+.ships-warn{background:#fff8e0;color:#856404}
+.results-bar{background:#0a3d1f;padding:10px 14px;border-bottom:1px solid rgba(201,168,76,0.15)}
+.results-search{display:flex;background:rgba(255,255,255,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:8px;overflow:hidden}
+.results-search input{flex:1;border:none;outline:none;background:transparent;padding:9px 12px;font-size:0.88rem;color:#fff;min-width:0;font-family:system-ui,sans-serif}
+.results-search input::placeholder{color:rgba(255,255,255,0.4)}
+.results-search button{background:#c9a84c;color:#0a3d1f;border:none;padding:9px 14px;font-weight:700;font-size:0.82rem;cursor:pointer;font-family:system-ui,sans-serif}
+.results-meta{font-size:0.73rem;color:rgba(255,255,255,0.5);margin-top:6px}
+.prod-bar{background:#0a3d1f;padding:11px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(201,168,76,0.15)}
+.back-btn{width:32px;height:32px;background:rgba(255,255,255,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:7px;color:#c9a84c;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:system-ui,sans-serif}
+.prod-title{flex:1;font-size:0.86rem;font-weight:500;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod-thumb{width:56px;height:56px;background:rgba(255,255,255,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;overflow:hidden}
+.prod-thumb img{width:100%;height:100%;object-fit:contain}
+.saving-banner{margin:12px 14px 0;background:linear-gradient(135deg,#0a3d1f,#16a05a);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;border:1px solid rgba(201,168,76,0.15)}
+.saving-icon{width:38px;height:38px;background:rgba(201,168,76,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.2rem;color:#c9a84c;flex-shrink:0}
+.saving-amount{font-size:1rem;font-weight:700;color:#e8c96a}
+.saving-detail{font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:1px}
+.compare-wrap{margin:12px 14px 0}
+.compare-card{background:#fff;border:1px solid #e8e0cc;border-radius:12px;overflow:hidden}
+.compare-head{padding:10px 13px;background:#faf8f2;border-bottom:1px solid #e8e0cc;font-size:0.7rem;font-weight:600;color:#4a4a38;text-transform:uppercase;letter-spacing:0.07em}
+.row{display:flex;align-items:center;padding:10px 13px;border-bottom:1px solid #f5f2ec;text-decoration:none;color:inherit}
+.row:last-child{border-bottom:none}
+.row-best{background:#eef8f2}
+.row-worst{background:#fdf0ef}
+.row-flag{width:24px;height:17px;border-radius:3px;object-fit:cover;flex-shrink:0}
+.row-info{flex:1;margin-left:8px;min-width:0}
+.row-name{font-size:0.8rem;font-weight:500;color:#1a1a14;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.row-domain{font-size:0.68rem;color:#8a8a70;margin-top:1px}
+.row-price{font-size:0.98rem;font-weight:700;margin-left:8px;flex-shrink:0}
+.row-btn{background:linear-gradient(135deg,#0a3d1f,#16a05a);color:#e8c96a;border:none;padding:6px 11px;border-radius:6px;font-size:0.72rem;font-weight:600;cursor:pointer;white-space:nowrap;margin-left:6px;flex-shrink:0;font-family:system-ui,sans-serif}
+.row-btn-sec{background:transparent;color:#4a4a38;border:1px solid #e8e0cc}
+.badge{font-size:0.62rem;font-weight:600;padding:1px 5px;border-radius:4px}
+.badge-best{background:#d4edda;color:#0f5c30}
+.badge-worst{background:#fde8e8;color:#c0392b}
+.del-free{font-size:0.67rem;font-weight:600;color:#0f5c30;background:#e6f5ec;padding:2px 5px;border-radius:4px;display:inline-block}
+.del-paid{font-size:0.67rem;color:#4a4a38;background:#f2ede0;padding:2px 5px;border-radius:4px;border:1px solid #e8e0cc;display:inline-block}
+.total-row{display:flex;justify-content:space-between;align-items:center;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:6px;padding:5px 8px;margin-top:4px;font-size:0.7rem;color:#4a4a38}
+.total-val{font-size:0.88rem;font-weight:700;color:#0a3d1f}
+.page-hero{background:linear-gradient(135deg,#0a3d1f,#16a05a);padding:28px 16px 32px}
+.page-kicker{font-size:0.65rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#c9a84c;margin-bottom:6px}
+.page-hero h2{font-size:1.6rem;font-weight:700;color:#fff;line-height:1.2}
+.info-card{background:#fff;border:1px solid #e8e0cc;border-radius:12px;padding:16px;margin:0 16px 10px}
+.info-card h3{font-size:0.95rem;font-weight:700;color:#0a3d1f;margin-bottom:8px}
+.info-card p{font-size:0.82rem;color:#4a4a38;line-height:1.8}
+.faq-item{background:#fff;border:1px solid #e8e0cc;border-radius:12px;margin:0 16px 8px;overflow:hidden}
+.faq-q{width:100%;text-align:left;background:none;border:none;padding:13px 15px;font-size:0.85rem;font-weight:600;color:#0a3d1f;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:system-ui,sans-serif}
+.faq-icon{color:#c9a84c;font-size:1.2rem;font-weight:300;flex-shrink:0}
+.faq-a{display:none;padding:0 15px 13px;font-size:0.81rem;color:#4a4a38;line-height:1.8;border-top:1px solid #f0ece0;padding-top:10px}
+.set-card{background:#fff;border:1px solid #e8e0cc;border-radius:12px;padding:16px;margin:16px 16px 10px}
+.set-card h3{font-size:0.95rem;font-weight:700;color:#0a3d1f;margin-bottom:4px}
+.set-card p{font-size:0.77rem;color:#8a8a70;margin-bottom:14px;line-height:1.5}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:0.68rem;font-weight:600;color:#4a4a38;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.05em}
+.field input{width:100%;border:1px solid #e8e0cc;border-radius:7px;padding:9px 11px;font-size:0.85rem;color:#1a1a14;background:#faf8f2;outline:none;font-family:system-ui,sans-serif}
+.field input:focus{border-color:#c9a84c;background:#fff}
+.save-btn{width:100%;background:linear-gradient(135deg,#c9a84c,#9a7a2e);color:#0a3d1f;border:none;padding:12px;border-radius:8px;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:system-ui,sans-serif}
+.status{border-radius:8px;padding:9px 13px;font-size:0.8rem;margin:0 16px 10px;display:none}
+.status-ok{background:#e6f5ec;color:#0f5c30;border:1px solid #86efac}
+.status-err{background:#fdf0ef;color:#c0392b;border:1px solid #fca5a5}
+.disclaimer{background:#fffbeb;border:1px solid rgba(240,192,64,0.3);border-radius:8px;padding:9px 12px;font-size:0.71rem;color:#78501a;margin:0 16px 14px;line-height:1.5}
+footer{background:#0a3d1f;color:rgba(255,255,255,0.35);text-align:center;padding:22px 16px;font-size:0.73rem;border-top:1px solid rgba(201,168,76,0.1)}
+footer strong{color:#c9a84c}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#c9a84c;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="overlay" onclick="closeMenu()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <span class="drawer-logo">PricePilot.IE</span>
+    <button class="drawer-close" onclick="closeMenu()">✕</button>
+  </div>
+  <button class="drawer-item" onclick="closeMenu();nav('home')">🏠 Home</button>
+  <div class="drawer-div"></div>
+  <button class="drawer-item" onclick="closeMenu();nav('about')">ℹ️ About</button>
+  <button class="drawer-item" onclick="closeMenu();nav('faq')">❓ FAQ</button>
+  <div class="drawer-div"></div>
+  <button class="drawer-item" onclick="closeMenu();nav('settings')">⚙️ Settings</button>
+  <div class="drawer-foot">PricePilot.ie · Not affiliated with Amazon<br>hello@pricepilot.ie</div>
+</div>
+
+<header>
+  <a class="logo" href="#" onclick="nav('home');return false">
+    <div class="logo-box">€</div>
+    <span class="logo-text">PricePilot</span>
+    <span class="logo-ie">.IE</span>
+  </a>
+  <div class="burger" onclick="openMenu()">
+    <span></span><span></span><span></span>
+  </div>
+</header>
+
+<div class="page active" id="page-home">
+  <div class="hero">
+    <h1>Find Europe's<br><em>best price</em>,<br>delivered to Ireland</h1>
+    <p>Ireland pays more. PricePilot finds where it's cheaper across all 6 Amazon stores in Europe.</p>
+    <div class="search-row">
+      <input type="text" id="homeSearch" placeholder="Search any product…" onkeydown="if(event.key==='Enter')doSearch()">
+      <button onclick="doSearch()">Search</button>
+    </div>
+    <div class="flags">
+      <span class="flag"><img src="https://flagcdn.com/w20/ie.png"> Amazon.ie</span>
+      <span class="flag"><img src="https://flagcdn.com/w20/gb.png"> Amazon.co.uk</span>
+      <span class="flag"><img src="https://flagcdn.com/w20/de.png"> Amazon.de</span>
+      <span class="flag"><img src="https://flagcdn.com/w20/fr.png"> Amazon.fr</span>
+      <span class="flag"><img src="https://flagcdn.com/w20/it.png"> Amazon.it</span>
+      <span class="flag"><img src="https://flagcdn.com/w20/es.png"> Amazon.es</span>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title">Today's Top Deals</div>
+    <div class="section-sub">Biggest savings across Amazon Europe</div>
+    <div id="homeDeals"></div>
+  </div>
+  <div class="disclaimer"><strong>Affiliate Disclosure:</strong> PricePilot.ie participates in the Amazon EU Associates Programme. We may earn a small commission at no extra cost to you.</div>
+  <footer><strong>PricePilot.ie</strong><br>Not affiliated with Amazon · Prices subject to change</footer>
+</div>
+
+<div class="page" id="page-results">
+  <div class="results-bar">
+    <div class="results-search">
+      <input type="text" id="resultsSearch" placeholder="Search products…" onkeydown="if(event.key==='Enter')doSearch()">
+      <button onclick="doSearch()">Search</button>
+    </div>
+    <div class="results-meta" id="resultsMeta">Ready to search…</div>
+  </div>
+  <div class="section">
+    <div id="resultsList"></div>
+  </div>
+  <div class="disclaimer"><strong>Affiliate Disclosure:</strong> PricePilot.ie earns commission on purchases through our links.</div>
+  <footer><strong>PricePilot.ie</strong> · Not affiliated with Amazon</footer>
+</div>
+
+<div class="page" id="page-product">
+  <div class="prod-bar">
+    <button class="back-btn" onclick="nav('results')">←</button>
+    <div class="prod-title" id="prodTitle">Loading…</div>
+    <div class="prod-thumb" id="prodThumb">€</div>
+  </div>
+  <div class="saving-banner">
+    <div class="saving-icon">€</div>
+    <div>
+      <div class="saving-amount" id="savingAmt">Calculating…</div>
+      <div class="saving-detail" id="savingDetail">Comparing 6 Amazon stores</div>
+    </div>
+  </div>
+  <div class="compare-wrap">
+    <div class="compare-card">
+      <div class="compare-head">Price Comparison · Sorted by total delivered cost</div>
+      <div id="compareTable"></div>
+    </div>
+  </div>
+  <div style="height:14px"></div>
+  <div class="disclaimer"><strong>Affiliate Disclosure:</strong> Always verify the final price on Amazon before purchasing.</div>
+  <footer><strong>PricePilot.ie</strong> · Not affiliated with Amazon</footer>
+</div>
+
+<div class="page" id="page-about">
+  <div class="page-hero">
+    <div class="page-kicker">About PricePilot.ie</div>
+    <h2>Built for Irish shoppers.<br>By an Irish shopper.</h2>
+  </div>
+  <div style="padding:16px 0 8px">
+    <div class="info-card">
+      <h3>What is PricePilot.ie?</h3>
+      <p>PricePilot.ie is a free price comparison tool that helps Irish shoppers find the cheapest price across all six Amazon marketplaces in Europe — Ireland, UK, Germany, France, Italy and Spain. We show the cheapest total cost including delivery to Ireland.</p>
+    </div>
+    <div class="info-card">
+      <h3>Why did we build this?</h3>
+      <p>Ireland consistently pays more for consumer goods. Amazon.ie only launched in 2025 and prices are often higher than other European stores for the exact same product. PricePilot was built so Irish shoppers can make genuinely informed decisions.</p>
+    </div>
+    <div class="info-card">
+      <h3>Affiliate Disclosure</h3>
+      <p>PricePilot.ie participates in the Amazon EU Associates Programme. When you purchase through our links we may earn a small commission at absolutely no extra cost to you. Our recommendations are always based purely on total delivered price.</p>
+    </div>
+    <div class="info-card">
+      <h3>Contact</h3>
+      <p>📧 <a href="mailto:hello@pricepilot.ie" style="color:#0f5c30;font-weight:500">hello@pricepilot.ie</a></p>
+    </div>
+  </div>
+  <footer><strong>PricePilot.ie</strong> · Not affiliated with Amazon</footer>
+</div>
+
+<div class="page" id="page-faq">
+  <div class="page-hero">
+    <div class="page-kicker">Frequently Asked Questions</div>
+    <h2>Everything you<br>need to know.</h2>
+  </div>
+  <div style="padding:16px 0 8px" id="faqWrap"></div>
+  <div class="disclaimer">Still have a question? Email <a href="mailto:hello@pricepilot.ie" style="color:#0f5c30">hello@pricepilot.ie</a></div>
+  <footer><strong>PricePilot.ie</strong> · Not affiliated with Amazon</footer>
+</div>
+
+<div class="page" id="page-settings">
+  <div class="page-hero">
+    <div class="page-kicker">Settings</div>
+    <h2>Connect your<br>API & Affiliates</h2>
+  </div>
+  <div class="set-card">
+    <h3>Amazon Associates IDs</h3>
+    <p>Enter your tracking IDs to earn commission on sales. The Scrape.do API key is securely stored on the server.</p>
+    <div class="field"><label>Amazon.ie</label><input type="text" id="tagIE" placeholder="pricepilot-ie-21"></div>
+    <div class="field"><label>Amazon.co.uk</label><input type="text" id="tagGB" placeholder="pricepilot-uk-21"></div>
+    <div class="field"><label>Amazon.de</label><input type="text" id="tagDE" placeholder="pricepilot-de-21"></div>
+    <div class="field"><label>Amazon.fr</label><input type="text" id="tagFR" placeholder="pricepilot-fr-21"></div>
+    <div class="field"><label>Amazon.it</label><input type="text" id="tagIT" placeholder="pricepilot-it-21"></div>
+    <div class="field"><label>Amazon.es</label><input type="text" id="tagES" placeholder="pricepilot-es-21"></div>
+    <button class="save-btn" onclick="saveSettings()">Save Settings</button>
+  </div>
+  <div class="status" id="settingsStatus"></div>
+  <div style="height:16px"></div>
+  <footer><strong>PricePilot.ie</strong> · Not affiliated with Amazon</footer>
+</div>
+
+<script>
+var C = {
+  tags: {
+    ie: localStorage.getItem('pp_ie') || '',
+    gb: localStorage.getItem('pp_gb') || '',
+    de: localStorage.getItem('pp_de') || '',
+    fr: localStorage.getItem('pp_fr') || '',
+    it: localStorage.getItem('pp_it') || '',
+    es: localStorage.getItem('pp_es') || ''
+  }
+};
+
+var M = [
+  {code:'ie',name:'Amazon.ie',   country:'Ireland',       flag:'https://flagcdn.com/w40/ie.png', domain:'amazon.ie'},
+  {code:'gb',name:'Amazon.co.uk',country:'United Kingdom',flag:'https://flagcdn.com/w40/gb.png', domain:'amazon.co.uk'},
+  {code:'de',name:'Amazon.de',   country:'Germany',       flag:'https://flagcdn.com/w40/de.png', domain:'amazon.de'},
+  {code:'fr',name:'Amazon.fr',   country:'France',        flag:'https://flagcdn.com/w40/fr.png', domain:'amazon.fr'},
+  {code:'it',name:'Amazon.it',   country:'Italy',         flag:'https://flagcdn.com/w40/it.png', domain:'amazon.it'},
+  {code:'es',name:'Amazon.es',   country:'Spain',         flag:'https://flagcdn.com/w40/es.png', domain:'amazon.es'}
+];
+
+var DEL = {
+  ie:{free:25,cost:3.99}, gb:{free:42,cost:7.99},
+  de:{free:25,cost:4.99}, fr:{free:25,cost:4.99},
+  it:{free:25,cost:5.99}, es:{free:25,cost:5.99}
+};
+
+var DEMO = [
+  {title:'Apple iPhone 15 128GB Midnight',     thumb:'https://store.storeimages.cdn-apple.com/4982/as-images.apple.com/is/iphone-15-finish-select-202309-6-1inch-midnight?wid=400&hei=400&fmt=jpeg&qlt=90', asin:'B0CHX3QBCH', prices:{ie:849,gb:769,de:719,fr:749,it:799,es:789}},
+  {title:'Dyson V11 Absolute Cordless Vacuum', thumb:'https://dyson-h.assetsadobe2.com/is/image/content/dam/dyson/images/products/primary/394214-01.png?$responsive$&cropPathE=desktop&fit=stretch,1&wid=400', asin:'B07CWQ4DDD', prices:{ie:469,gb:420,de:429,fr:439,it:449,es:389}},
+  {title:'Nespresso Vertuo Next Coffee Machine',thumb:'https://www.nespresso.com/ecom/medias/sys_master/public/13886872051742/EN-Vertuo-Next-Titan-Coffee-Machine-GCA1-t.png?impolicy=productImages&imdensity=1&imwidth=400', asin:'B08KH1VD88', prices:{ie:129,gb:110,de:94,fr:98,it:79,es:89}},
+  {title:'Apple AirPods Pro 2nd Gen USB-C',    thumb:'https://store.storeimages.cdn-apple.com/4982/as-images.apple.com/is/MQD83?wid=400&hei=400&fmt=jpeg&qlt=90', asin:'B0CHWRXH8B', prices:{ie:279,gb:239,de:249,fr:229,it:259,es:244}},
+  {title:'LEGO Technic Bugatti Chiron 42083',  thumb:'https://www.lego.com/cdn/cs/set/assets/blt0e3de0be4b0bead9/42083.jpg?fit=bounds&format=jpg&quality=80&width=400&height=400', asin:'B0752N7KK6', prices:{ie:329,gb:295,de:289,fr:309,it:319,es:299}}
+];
+
+var FAQS = [
+  {q:'Is PricePilot.ie free to use?', a:'Yes, completely free. We earn a small affiliate commission from Amazon when you purchase through our links — at no extra cost to you.'},
+  {q:'How do you find the prices?', a:'PricePilot checks Amazon.ie and Amazon.de in real time and compares prices. Tap any product for a full 6-store comparison.'},
+  {q:'Will everything ship to Ireland?', a:'EU stores (Germany, France, Italy, Spain) ship to Ireland freely as Ireland is an EU member. Amazon UK ships to Ireland but post-Brexit customs charges may occasionally apply.'},
+  {q:'Do I pay extra for delivery?', a:'We include estimated delivery costs so you always see the real total price. EU stores and Amazon.ie offer free delivery on orders over €25.'},
+  {q:'Why do some products need a plug adapter?', a:'Ireland uses Type G three-pin plugs. Germany, France, Italy and Spain use Type C two-pin plugs. A Type C to Type G adapter costs €5-10 and is available in any hardware shop.'},
+  {q:'Is it legal to buy from foreign Amazon stores?', a:'Yes. As an EU resident you can freely buy from any EU Amazon store with no import duties. UK purchases may occasionally have customs checks post-Brexit.'},
+  {q:'Do you handle payments?', a:'No. When you tap to buy you go directly to Amazon\'s official website. We never see your payment details.'},
+  {q:'Is PricePilot affiliated with Amazon?', a:'We are independent and participate in the Amazon EU Associates Programme. We are not owned by or officially affiliated with Amazon.'}
+];
+
+var results = [];
+var currentProduct = null;
+
+function nav(page) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  var pg = document.getElementById('page-' + page);
+  if(pg) pg.classList.add('active');
+  window.scrollTo(0, 0);
+  if(page === 'home') renderDeals();
+  if(page === 'faq') renderFAQ();
+  if(page === 'settings') loadSettings();
+}
+
+function openMenu() {
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+}
+function closeMenu() {
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('drawer').classList.remove('open');
+}
+
+function mkt(code) { return M.find(function(m){ return m.code === code; }); }
+function getDelivery(code, price) {
+  var d = DEL[code];
+  if(!d) return {cost:0, free:true};
+  return {cost: price >= d.free ? 0 : d.cost, free: price >= d.free};
+}
+function buildLink(code, asin, title, buyLinks) {
+  if(buyLinks && buyLinks[code]) return buyLinks[code];
+  var m = mkt(code);
+  var tag = C.tags[code];
+  if(asin) return 'https://www.' + m.domain + '/dp/' + asin + (tag ? '?tag=' + tag : '');
+  return 'https://www.' + m.domain + '/s?k=' + encodeURIComponent(title) + (tag ? '&tag=' + tag : '');
+}
+function minCode(p) { return Object.entries(p.prices).sort(function(a,b){ return a[1]-b[1]; })[0][0]; }
+function maxCode(p) { return Object.entries(p.prices).sort(function(a,b){ return b[1]-a[1]; })[0][0]; }
+function saving(p) { return p.prices[maxCode(p)] - p.prices[minCode(p)]; }
+function shipsOK(code) { return ['ie','de','fr','it','es'].includes(code); }
+
+function cardHTML(p, i) {
+  var mn = minCode(p), mx = maxCode(p);
+  var mmn = mkt(mn), mmx = mkt(mx);
+  var sav = saving(p);
+  return '<div class="card" onclick="openProduct(' + i + ')">' +
+    '<div class="card-img">' + (p.thumb ? '<img src="' + p.thumb + '" alt="" onerror="this.parentNode.innerHTML=\'€\'">' : '€') + '</div>' +
+    '<div class="card-body">' +
+      '<div class="card-title">' + p.title + '</div>' +
+      '<div class="prices">' +
+        '<span class="chip chip-low"><img src="' + mmn.flag + '"> €' + p.prices[mn].toFixed(2) + '</span>' +
+        '<span class="chip chip-high"><img src="' + mmx.flag + '"> €' + p.prices[mx].toFixed(2) + '</span>' +
+      '</div>' +
+      (sav > 0.5 ? '<div class="save"><img src="' + mmx.flag + '"> → <img src="' + mmn.flag + '"> Save €' + sav.toFixed(2) + ' on ' + mmn.name + '</div>' : '') +
+      '<span class="ships ' + (shipsOK(mn) ? 'ships-yes' : 'ships-warn') + '">' + (shipsOK(mn) ? '✓ Ships to Ireland' : '⚠ Check shipping') + '</span>' +
+    '</div></div>';
+}
+
+function renderDeals() {
+  var sorted = DEMO.slice().sort(function(a,b){ return saving(b)-saving(a); });
+  results = sorted;
+  document.getElementById('homeDeals').innerHTML = sorted.map(function(p,i){ return cardHTML(p,i); }).join('');
+}
+
+function doSearch() {
+  var inp = document.getElementById('homeSearch') || document.getElementById('resultsSearch');
+  var q = inp ? inp.value.trim() : '';
+  if(!q) return;
+  var ri = document.getElementById('resultsSearch');
+  if(ri) ri.value = q;
+  results = []; document.getElementById('resultsList').innerHTML = '<div style="text-align:center;padding:30px;color:rgba(255,255,255,0.5)"><span class=\"spinner\"></span> Fetching real prices…</div>'; nav('results');
+  var meta = document.getElementById('resultsMeta');
+  meta.innerHTML = '<span class="spinner"></span> Fetching real prices from Amazon…';
+  scrapeSearch(q)
+    .then(function(res) {
+      if(res && res.length) {
+        results = res;
+        document.getElementById('resultsList').innerHTML = res.map(function(p,i){ return cardHTML(p,i); }).join('');
+        meta.textContent = '✓ ' + res.length + ' results for "' + q + '" · Tap any for full comparison';
+      } else {
+        showDemo(q, meta);
+      }
+    })
+    .catch(function(err) {
+      console.error(err);
+      showDemo(q, meta, true);
+    });
+}
+
+function showDemo(q, meta, isErr) {
+  var lq = q.toLowerCase();
+  var matched = DEMO.filter(function(p) {
+    return p.title.toLowerCase().includes(lq) || lq.split(' ').some(function(w){ return w.length > 2 && p.title.toLowerCase().includes(w); });
+  });
+  results = (matched.length ? matched : DEMO).slice(0,4).sort(function(a,b){ return saving(b)-saving(a); });
+  document.getElementById('resultsList').innerHTML = results.map(function(p,i){ return cardHTML(p,i); }).join('');
+  meta.textContent = (isErr ? '⚠ Could not fetch — ' : '') + 'Showing demo results for "' + q + '"';
+}
+
+async function scrapeSearch(query) {
+  // Single call now — backend handles all ASIN scraping
+  var res = await fetch('/.netlify/functions/search?query=' + encodeURIComponent(query) + '&store=amazon.ie');
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  var data = await res.json();
+  if(data.error) throw new Error(data.error);
+  var products = (data.products || []).filter(function(p){ return p && p.title && p.prices; });
+  products.sort(function(a,b){ return saving(b)-saving(a); });
+  return products;
+}
+
+function openProduct(i) {
+  var p = results[i];
+  if(!p) return;
+  currentProduct = p;
+  document.getElementById('prodTitle').textContent = p.title;
+  var th = document.getElementById('prodThumb');
+  th.innerHTML = p.thumb ? '<img src="' + p.thumb + '" alt="">' : '€';
+
+  var rows = Object.entries(p.prices).map(function(e) {
+    var del = getDelivery(e[0], e[1]);
+    return {code:e[0], price:e[1], total:+(e[1]+del.cost).toFixed(2), free:del.free, cost:del.cost};
+  }).sort(function(a,b){ return a.total-b.total; });
+
+  var best = rows[0], worst = rows[rows.length-1];
+  var sav = (worst.total-best.total).toFixed(2);
+  var pct = Math.round((worst.total-best.total)/worst.total*100);
+
+  document.getElementById('savingAmt').textContent = 'Save €' + sav + ' including delivery';
+  document.getElementById('savingDetail').textContent = pct + '% cheaper than ' + mkt(worst.code).name + ' · Total delivered price';
+
+  document.getElementById('compareTable').innerHTML = rows.map(function(row, idx) {
+    var m = mkt(row.code);
+    var isBest = idx===0, isWorst = idx===rows.length-1 && rows.length>2;
+    var link = buildLink(row.code, p.asin, p.title, p.buyLinks);
+    var diff = (row.total-best.total).toFixed(2);
+    return '<a class="row ' + (isBest?'row-best':isWorst?'row-worst':'') + '" href="' + link + '" target="_blank" rel="noopener sponsored">' +
+      '<img class="row-flag" src="' + m.flag + '" alt="">' +
+      '<div class="row-info">' +
+        '<div class="row-name">' + m.name + (isBest?' <span class="badge badge-best">Best</span>':isWorst?' <span class="badge badge-worst">Most Expensive</span>':'') + '</div>' +
+        '<div class="row-domain">' + m.domain + '</div>' +
+        (isBest ?
+          '<div class="total-row"><span>€' + row.price.toFixed(2) + ' + ' + (row.free?'<strong style="color:#0f5c30">free delivery</strong>':'€'+row.cost.toFixed(2)+' delivery') + '</span><span class="total-val">€' + row.total + '</span></div>' :
+          '<div style="margin-top:3px"><span class="' + (row.free?'del-free':'del-paid') + '">' + (row.free?'Free delivery':'+€'+row.cost.toFixed(2)) + '</span></div>'
+        ) +
+      '</div>' +
+      '<div style="font-size:0.96rem;font-weight:700;color:' + (isBest?'#0f5c30':isWorst?'#c0392b':'#1a1a14') + ';margin-left:8px;flex-shrink:0">€' + row.price.toFixed(2) + '</div>' +
+      '<button class="row-btn ' + (isBest?'':'row-btn-sec') + '" onclick="event.preventDefault();window.open(\'' + link + '\',\'_blank\')">' + (isBest?'Buy →':'+€'+diff) + '</button>' +
+    '</a>';
+  }).join('');
+
+  nav('product');
+}
+
+function renderFAQ() {
+  var wrap = document.getElementById('faqWrap');
+  if(!wrap || wrap.children.length > 0) return;
+  wrap.innerHTML = FAQS.map(function(item,i) {
+    return '<div class="faq-item"><button class="faq-q" onclick="toggleFAQ(' + i + ')">' + item.q + '<span class="faq-icon" id="fi' + i + '">+</span></button><div class="faq-a" id="fa' + i + '">' + item.a + '</div></div>';
+  }).join('');
+}
+
+function toggleFAQ(i) {
+  var a = document.getElementById('fa'+i), ic = document.getElementById('fi'+i);
+  if(!a) return;
+  var open = a.style.display === 'block';
+  a.style.display = open ? 'none' : 'block';
+  ic.textContent = open ? '+' : '−';
+}
+
+function loadSettings() {
+  document.getElementById('tagIE').value = C.tags.ie;
+  document.getElementById('tagGB').value = C.tags.gb;
+  document.getElementById('tagDE').value = C.tags.de;
+  document.getElementById('tagFR').value = C.tags.fr;
+  document.getElementById('tagIT').value = C.tags.it;
+  document.getElementById('tagES').value = C.tags.es;
+}
+
+function saveSettings() {
+  C.tags.ie = document.getElementById('tagIE').value.trim();
+  C.tags.gb = document.getElementById('tagGB').value.trim();
+  C.tags.de = document.getElementById('tagDE').value.trim();
+  C.tags.fr = document.getElementById('tagFR').value.trim();
+  C.tags.it = document.getElementById('tagIT').value.trim();
+  C.tags.es = document.getElementById('tagES').value.trim();
+  localStorage.setItem('pp_ie', C.tags.ie);
+  localStorage.setItem('pp_gb', C.tags.gb);
+  localStorage.setItem('pp_de', C.tags.de);
+  localStorage.setItem('pp_fr', C.tags.fr);
+  localStorage.setItem('pp_it', C.tags.it);
+  localStorage.setItem('pp_es', C.tags.es);
+  var s = document.getElementById('settingsStatus');
+  s.style.display = 'block';
+  s.className = 'status status-ok';
+  s.textContent = '✓ Saved!';
+  setTimeout(function(){ s.style.display='none'; }, 2000);
+}
+
+renderDeals();
+</script>
+</body>
+</html>
